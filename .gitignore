@@ -1,0 +1,5 @@
+# Contiene las dependencias de la aplicación. Se debe instalar por separado.
+/venv
+
+# Se generan al correr la aplicación.
+/__pycache__
