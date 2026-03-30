@@ -1,10 +1,11 @@
 from agent import preguntar_agente
 
 while True:
-  pregunta = input("\nPregunta (o 'salir'): ")
+  pregunta = input("\nNombre de archivo y pregunta (o 'salir'): ")
 
   if pregunta.lower() == "salir":
     break
 
-  respuesta = preguntar_agente(pregunta, "ejemplo.txt")
+  # Ahora el nombre del archivo se define en la pregunta en vez de ser fijo.
+  respuesta = preguntar_agente(pregunta)
   print("\nAgente:", respuesta)
