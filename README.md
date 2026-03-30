@@ -1,4 +1,4 @@
-## Agente IA Local (Ollama + Gemma3)
+## Agente IA Local (Ollama + Qwen)
 
 Este proyecto implementa un agente de IA local usando:
 
@@ -94,9 +94,9 @@ python main.py
 Ejemplos de preguntas:
 
 ```
-Que dice el archivo?
-Como responderias al contenido del archivo?
-Crees que el contenido del archivo es formal o informal?
+Que dice el archivo ejemplo.txt?
+Como responderias al contenido del archivo ejemplo.txt?
+Crees que el contenido del archivo ejemplo.txt es formal o informal?
 ```
 
 Salir de la aplicación:
