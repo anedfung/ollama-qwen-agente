@@ -3,3 +3,6 @@
 
 # Se generan al correr la aplicación.
 /__pycache__
+
+# Archivos de VSCode
+/.vscode

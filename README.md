@@ -60,7 +60,7 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
-#### Comando para desactivar venv
+#### Comando para desactivar venv (para después)
 
 ```bash
 deactivate
@@ -75,12 +75,19 @@ Si aún no existe, crea el archivo `requirements.txt`:
 ```txt
 ollama
 python-dotenv
+chromadb
+sentence-transformers
 ```
 
-Luego instala:
+Luego instala (Puede durar varios minutos):
 
 ```bash
 pip install -r requirements.txt
+```
+
+Verificar que se instalaron las dependencias:
+```bash
+pip list
 ```
 
 ---
@@ -91,12 +98,12 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Ejemplos de preguntas:
+Flujo de indexación y preguntas:
 
 ```
-Que dice el archivo ejemplo.txt?
-Como responderias al contenido del archivo ejemplo.txt?
-Crees que el contenido del archivo ejemplo.txt es formal o informal?
+Indexa ejemplo.txt
+Como responderias al contenido del archivo?
+Cuantas letras diferentes contiene el archivo?
 ```
 
 Salir de la aplicación:
