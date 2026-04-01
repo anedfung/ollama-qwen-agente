@@ -3,6 +3,36 @@ import json
 from tools import leer_archivo
 from rag import buscar_contexto, indexar_archivo
 
+PLANNER_PROMPT = """
+Eres un planificador de agentes IA.
+
+Tu trabajo NO es responder la pregunta.
+
+Tu trabajo es crear un plan paso a paso usando acciones.
+
+Acciones disponibles:
+
+- buscar_memoria(pregunta)
+- indexar_archivo(nombre_archivo)
+- responder_usuario(texto)
+
+Reglas:
+
+- Si la pregunta requiere información previa,
+  primero usa buscar_memoria.
+- El último paso SIEMPRE debe ser responder_usuario.
+- Devuelve SOLO JSON válido.
+
+Formato:
+
+{
+  "plan": [
+    {"accion": "...", "argumentos": {...}},
+    {"accion": "...", "argumentos": {...}}
+  ]
+}
+"""
+
 SYSTEM_PROMPT = """
 Eres un agente con memoria persistente.
 
@@ -15,7 +45,6 @@ Tienes estas capacidades:
    - Busca información relevante en documentos previamente indexados.
 
 REGLAS IMPORTANTES:
-
 - Cuando el usuario haga preguntas sobre documentos,
   SIEMPRE debes usar primero buscar_memoria.
 - No pidas el nombre del archivo si puedes encontrar
@@ -87,54 +116,88 @@ def ejecutar_tool(nombre, argumentos):
 
   return "Tool desconocida"
 
-def preguntar_agente(pregunta):
+def crear_plan(pregunta):
 
-  contexto = buscar_contexto(pregunta)
-
-  messages = [
-    {"role": "system", "content": SYSTEM_PROMPT},
-    {
-      "role": "user",
-      "content": f"""
-        Pregunta del usuario:
-        {pregunta}
-
-        Contexto relevante encontrado:
-        {contexto}
-        """
-    },
+  mensajes = [
+    {"role": "system", "content": PLANNER_PROMPT},
+    {"role": "user", "content": pregunta}
   ]
 
-  while True:
+  respuesta = ollama.chat(
+    model="qwen2.5:3b",
+    messages=mensajes
+  )
 
-    respuesta = ollama.chat(
-      model="qwen2.5:3b",
-      messages=messages,
-      tools=TOOLS,
-    )
+  contenido = respuesta["message"]["content"]
 
-    # Separa respuesta["message"] para no usar las demas propiedades de respuesta.
-    message = respuesta["message"]
-    messages.append(message)
+  try:
+    plan = json.loads(contenido)["plan"]
 
-    # Permite ver el procesamiento del agente en cada repeticion.
-    # print("LLM:", message)
+    # 🔥 GARANTÍA DE RESPUESTA FINAL
+    if not any(p["accion"] == "responder_usuario" for p in plan):
+      plan.append({
+        "accion": "responder_usuario",
+        "argumentos": {}
+      })
 
-    # Primero no contiene tool_calls, entonces busca el tool indicado y obtiene el resultado.
-    if "tool_calls" in message:
+    return plan
 
-      for tool_call in message["tool_calls"]:
-        nombre = tool_call["function"]["name"]
-        args = tool_call["function"]["arguments"]
+  except Exception as e:
+    print("Error creando plan:", e)
+    print(contenido)
+    return []
+  
+def ejecutar_plan(plan, pregunta):
 
-        resultado = ejecutar_tool(nombre, args)
+  contexto = ""
 
-        # Se agrega el resultado a messages
-        messages.append({
-          "role": "tool",
-          "content": resultado,
-        })
+  for paso in plan:
 
-    # Segundo ya tiene tool_calls, entonces devuelve el resultado.
-    else:
-      return message["content"]
+    accion = paso["accion"]
+    args = paso.get("argumentos", {})
+
+    print(f"\n⚙️ Ejecutando: {accion}")
+
+    if accion == "buscar_memoria":
+      contexto = buscar_contexto(args["pregunta"])
+
+    elif accion == "indexar_archivo":
+      ejecutar_tool("indexar_archivo", args)
+
+    elif accion == "responder_usuario":
+
+      mensajes = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+          "role": "user",
+          "content": f"""
+            Pregunta:
+            {pregunta}
+
+            Contexto:
+            {contexto}
+          """
+        }
+      ]
+
+      respuesta = ollama.chat(
+        model="qwen2.5:3b",
+        messages=mensajes
+      )
+
+      return respuesta["message"]["content"]
+
+  return "No se pudo ejecutar el plan."
+
+def preguntar_agente(pregunta):
+
+  print("\n🧠 Creando plan...")
+  plan = crear_plan(pregunta)
+
+  print("\n📋 Plan generado:")
+  for paso in plan:
+    print(paso)
+
+  respuesta = ejecutar_plan(plan, pregunta)
+
+  return respuesta
