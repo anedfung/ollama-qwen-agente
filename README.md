@@ -102,7 +102,7 @@ Flujo de indexación y preguntas:
 
 ```
 Indexa ejemplo.txt
-Como responderias al contenido del archivo?
+De que color son las rosas?
 Cuantas letras diferentes contiene el archivo?
 ```
 
