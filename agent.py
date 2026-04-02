@@ -33,6 +33,34 @@ Formato:
 }
 """
 
+EVALUATOR_PROMPT = """
+Eres un evaluador de respuestas de un agente IA.
+
+Debes analizar si la respuesta es correcta
+según la pregunta original y el contexto recuperado.
+
+Reglas:
+
+- Si la pregunta requiere información previa,
+  la respuesta DEBE usar el contexto.
+- Si no hay contexto cuando debería haberlo,
+  la respuesta es incorrecta.
+- Sé estricto.
+
+Devuelve SOLO JSON válido:
+
+{
+  "correcto": true
+}
+
+o
+
+{
+  "correcto": false,
+  "razon": "explicación breve"
+}
+"""
+
 SYSTEM_PROMPT = """
 Eres un agente con memoria persistente.
 
@@ -105,6 +133,39 @@ TOOLS = [
     }
   }
 ]
+
+def evaluar_respuesta(pregunta, respuesta, contexto):
+
+  mensajes = [
+    {"role": "system", "content": EVALUATOR_PROMPT},
+    {
+      "role": "user",
+      "content": f"""
+        Pregunta:
+        {pregunta}
+
+        Contexto:
+        {contexto}
+
+        Respuesta del agente:
+        {respuesta}
+        """
+    }
+  ]
+
+  evaluacion = ollama.chat(
+    model="qwen2.5:3b",
+    messages=mensajes
+  )
+
+  contenido = evaluacion["message"]["content"]
+
+  try:
+    return json.loads(contenido)
+  except:
+    print("Error evaluando:")
+    print(contenido)
+    return {"correcto": True}
 
 def ejecutar_tool(nombre, argumentos):
   if nombre == "leer_archivo":
@@ -185,19 +246,39 @@ def ejecutar_plan(plan, pregunta):
         messages=mensajes
       )
 
-      return respuesta["message"]["content"]
+      return respuesta["message"]["content"], contexto
 
   return "No se pudo ejecutar el plan."
 
 def preguntar_agente(pregunta):
 
-  print("\n🧠 Creando plan...")
-  plan = crear_plan(pregunta)
+  intentos = 0
+  MAX_INTENTOS = 2
 
-  print("\n📋 Plan generado:")
-  for paso in plan:
-    print(paso)
+  while intentos < MAX_INTENTOS:
 
-  respuesta = ejecutar_plan(plan, pregunta)
+    print("\n🧠 Creando plan...")
+    plan = crear_plan(pregunta)
+
+    print("\n📋 Plan:")
+    for paso in plan:
+      print(paso)
+
+    respuesta, contexto = ejecutar_plan(plan, pregunta)
+
+    print("\n🧪 Evaluando respuesta...")
+    evaluacion = evaluar_respuesta(
+      pregunta,
+      respuesta,
+      contexto
+    )
+
+    if evaluacion.get("correcto"):
+      return respuesta
+
+    print("❌ Evaluación falló:", evaluacion.get("razon"))
+
+    intentos += 1
+    print("🔁 Reintentando con nuevo plan...")
 
   return respuesta
