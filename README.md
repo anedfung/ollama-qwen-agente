@@ -101,9 +101,9 @@ python3 main.py
 Flujo de indexación y preguntas:
 
 ```
-Indexa ejemplo.txt
+ejemplo.txt
+Según los documentos en memoria, de que color son las rosas?
 De que color son las rosas?
-Me puedes explicar de nuevo, pero hablando como si fueramos cavernicolas en una cueva?
 ```
 
 Salir de la aplicación:
