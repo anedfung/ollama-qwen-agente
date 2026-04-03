@@ -95,7 +95,7 @@ pip list
 ### 5. Ejecutar la aplicación
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 Flujo de indexación y preguntas:
@@ -103,7 +103,7 @@ Flujo de indexación y preguntas:
 ```
 Indexa ejemplo.txt
 De que color son las rosas?
-Cuantas letras diferentes contiene el archivo?
+Me puedes explicar de nuevo, pero hablando como si fueramos cavernicolas en una cueva?
 ```
 
 Salir de la aplicación:
