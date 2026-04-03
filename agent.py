@@ -14,6 +14,39 @@ class AgentState:
     correcto: bool = False
     intentos: int = 0
 
+
+## PROMPTS de nodos
+
+ROUTER_PROMPT = """
+Eres un router de un agente IA.
+
+Clasifica la intención del usuario.
+
+Opciones posibles:
+
+- "chat" → conversación normal sin memoria
+- "memory" → preguntas sobre documentos o información previa
+- "index" → el usuario quiere guardar/indexar un archivo
+
+Devuelve SOLO JSON válido:
+
+{
+  "ruta": "chat"
+}
+
+o
+
+{
+  "ruta": "memory"
+}
+
+o
+
+{
+  "ruta": "index"
+}
+"""
+
 PLANNER_PROMPT = """
 Eres un planificador de agentes IA.
 
@@ -146,7 +179,7 @@ TOOLS = [
 ]
 
 
-## Funciones de tools
+## Funciones de nodos
 
 def ejecutar_tool(nombre, argumentos):
   if nombre == "leer_archivo":
@@ -157,6 +190,27 @@ def ejecutar_tool(nombre, argumentos):
     return buscar_contexto(argumentos["pregunta"])
 
   return "Tool desconocida"
+
+def decidir_ruta(pregunta):
+
+  mensajes = [
+    {"role": "system", "content": ROUTER_PROMPT},
+    {"role": "user", "content": pregunta},
+  ]
+
+  respuesta = ollama.chat(
+    model="qwen2.5:3b",
+    messages=mensajes
+  )
+
+  contenido = respuesta["message"]["content"]
+
+  try:
+    decision = json.loads(contenido)
+    return decision.get("ruta", "chat")
+  except:
+    print("Router inválido:", contenido)
+    return "chat"
 
 def crear_plan(pregunta):
 
@@ -267,6 +321,47 @@ def evaluar_respuesta(pregunta, respuesta, contexto):
 
 ## Funciones de State Machine
 
+def nodo_router(state: AgentState):
+
+  print("\n🧭 [ROUTER]")
+
+  ruta = decidir_ruta(state.pregunta)
+
+  print("Ruta elegida:", ruta)
+
+  if ruta == "chat":
+    return "chat", state
+
+  if ruta == "index":
+    return "index", state
+
+  return "plan", state
+
+def nodo_chat(state: AgentState):
+
+  print("\n💬 [CHAT DIRECTO]")
+
+  respuesta = ollama.chat(
+    model="qwen2.5:3b",
+    messages=[
+      {"role": "user", "content": state.pregunta}
+    ]
+  )
+
+  state.respuesta = respuesta["message"]["content"]
+
+  return "end", state
+
+def nodo_index(state: AgentState):
+
+  print("\n📚 [INDEXAR]")
+  print(state.pregunta.strip());
+  resultado = indexar_archivo(state.pregunta.strip())
+
+  state.respuesta = resultado
+
+  return "end", state
+
 def nodo_plan(state: AgentState):
 
   print("\n🧠 [PLAN]")
@@ -318,12 +413,15 @@ def nodo_evaluate(state: AgentState):
 def ejecutar_grafo(state: AgentState):
 
   nodos = {
+    "router": nodo_router,
+    "chat": nodo_chat,
+    "index": nodo_index,
     "plan": nodo_plan,
     "execute": nodo_execute,
     "evaluate": nodo_evaluate,
   }
 
-  nodo_actual = "plan"
+  nodo_actual = "router"
 
   while nodo_actual != "end":
     nodo_actual, state = nodos[nodo_actual](state)
@@ -332,8 +430,8 @@ def ejecutar_grafo(state: AgentState):
 
 def preguntar_agente(pregunta):
 
-    estado_inicial = AgentState(pregunta=pregunta)
+  estado = AgentState(pregunta=pregunta)
 
-    estado_final = ejecutar_grafo(estado_inicial)
+  final = ejecutar_grafo(estado)
 
-    return estado_final.respuesta
+  return final.respuesta
