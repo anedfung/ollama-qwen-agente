@@ -3,6 +3,17 @@ import json
 from tools import leer_archivo
 from rag import buscar_contexto, indexar_archivo
 
+from dataclasses import dataclass
+
+@dataclass
+class AgentState:
+    pregunta: str
+    plan: list | None = None
+    respuesta: str | None = None
+    contexto: str | None = None
+    correcto: bool = False
+    intentos: int = 0
+
 PLANNER_PROMPT = """
 Eres un planificador de agentes IA.
 
@@ -33,6 +44,30 @@ Formato:
 }
 """
 
+SYSTEM_PROMPT = """
+Eres un agente con memoria persistente.
+
+Tienes estas capacidades:
+
+1. indexar_archivo(nombre_archivo)
+   - Guarda un documento en tu memoria permanente.
+
+2. buscar_memoria(pregunta)
+   - Busca información relevante en documentos previamente indexados.
+
+REGLAS IMPORTANTES:
+- Cuando el usuario haga preguntas sobre documentos,
+  SIEMPRE debes usar primero buscar_memoria.
+- No pidas el nombre del archivo si puedes encontrar
+  la información usando buscar_memoria.
+- Usa buscar_memoria incluso si el usuario no menciona
+  explícitamente un archivo.
+- Después de obtener resultados de memoria,
+  usa esa información para responder.
+
+Nunca inventes información si puedes buscar en memoria primero.
+"""
+
 EVALUATOR_PROMPT = """
 Eres un evaluador de respuestas de un agente IA.
 
@@ -59,30 +94,6 @@ o
   "correcto": false,
   "razon": "explicación breve"
 }
-"""
-
-SYSTEM_PROMPT = """
-Eres un agente con memoria persistente.
-
-Tienes estas capacidades:
-
-1. indexar_archivo(nombre_archivo)
-   - Guarda un documento en tu memoria permanente.
-
-2. buscar_memoria(pregunta)
-   - Busca información relevante en documentos previamente indexados.
-
-REGLAS IMPORTANTES:
-- Cuando el usuario haga preguntas sobre documentos,
-  SIEMPRE debes usar primero buscar_memoria.
-- No pidas el nombre del archivo si puedes encontrar
-  la información usando buscar_memoria.
-- Usa buscar_memoria incluso si el usuario no menciona
-  explícitamente un archivo.
-- Después de obtener resultados de memoria,
-  usa esa información para responder.
-
-Nunca inventes información si puedes buscar en memoria primero.
 """
 
 TOOLS = [
@@ -134,38 +145,8 @@ TOOLS = [
   }
 ]
 
-def evaluar_respuesta(pregunta, respuesta, contexto):
 
-  mensajes = [
-    {"role": "system", "content": EVALUATOR_PROMPT},
-    {
-      "role": "user",
-      "content": f"""
-        Pregunta:
-        {pregunta}
-
-        Contexto:
-        {contexto}
-
-        Respuesta del agente:
-        {respuesta}
-        """
-    }
-  ]
-
-  evaluacion = ollama.chat(
-    model="qwen2.5:3b",
-    messages=mensajes
-  )
-
-  contenido = evaluacion["message"]["content"]
-
-  try:
-    return json.loads(contenido)
-  except:
-    print("Error evaluando:")
-    print(contenido)
-    return {"correcto": True}
+## Funciones de tools
 
 def ejecutar_tool(nombre, argumentos):
   if nombre == "leer_archivo":
@@ -250,35 +231,109 @@ def ejecutar_plan(plan, pregunta):
 
   return "No se pudo ejecutar el plan."
 
+def evaluar_respuesta(pregunta, respuesta, contexto):
+
+  mensajes = [
+    {"role": "system", "content": EVALUATOR_PROMPT},
+    {
+      "role": "user",
+      "content": f"""
+        Pregunta:
+        {pregunta}
+
+        Contexto:
+        {contexto}
+
+        Respuesta del agente:
+        {respuesta}
+        """
+    }
+  ]
+
+  evaluacion = ollama.chat(
+    model="qwen2.5:3b",
+    messages=mensajes
+  )
+
+  contenido = evaluacion["message"]["content"]
+
+  try:
+    return json.loads(contenido)
+  except:
+    print("Error evaluando:")
+    print(contenido)
+    return {"correcto": True}
+  
+
+## Funciones de State Machine
+
+def nodo_plan(state: AgentState):
+
+  print("\n🧠 [PLAN]")
+
+  state.plan = crear_plan(state.pregunta)
+
+  for paso in state.plan:
+    print(paso)
+
+  return "execute", state
+
+def nodo_execute(state: AgentState):
+
+  print("\n⚙️ [EXECUTE]")
+
+  respuesta, contexto = ejecutar_plan(
+    state.plan,
+    state.pregunta
+  )
+
+  state.respuesta = respuesta
+  state.contexto = contexto
+
+  return "evaluate", state
+  
+def nodo_evaluate(state: AgentState):
+
+  print("\n🧪 [EVALUATE]")
+
+  evaluacion = evaluar_respuesta(
+    state.pregunta,
+    state.respuesta,
+    state.contexto
+  )
+
+  state.correcto = evaluacion.get("correcto", True)
+  state.intentos += 1
+
+  if state.correcto:
+    return "end", state
+
+  if state.intentos >= 2:
+    print("⚠️ Máximo de intentos alcanzado")
+    return "end", state
+
+  print("🔁 Replaneando...")
+  return "plan", state
+
+def ejecutar_grafo(state: AgentState):
+
+  nodos = {
+    "plan": nodo_plan,
+    "execute": nodo_execute,
+    "evaluate": nodo_evaluate,
+  }
+
+  nodo_actual = "plan"
+
+  while nodo_actual != "end":
+    nodo_actual, state = nodos[nodo_actual](state)
+
+  return state
+
 def preguntar_agente(pregunta):
 
-  intentos = 0
-  MAX_INTENTOS = 2
+    estado_inicial = AgentState(pregunta=pregunta)
 
-  while intentos < MAX_INTENTOS:
+    estado_final = ejecutar_grafo(estado_inicial)
 
-    print("\n🧠 Creando plan...")
-    plan = crear_plan(pregunta)
-
-    print("\n📋 Plan:")
-    for paso in plan:
-      print(paso)
-
-    respuesta, contexto = ejecutar_plan(plan, pregunta)
-
-    print("\n🧪 Evaluando respuesta...")
-    evaluacion = evaluar_respuesta(
-      pregunta,
-      respuesta,
-      contexto
-    )
-
-    if evaluacion.get("correcto"):
-      return respuesta
-
-    print("❌ Evaluación falló:", evaluacion.get("razon"))
-
-    intentos += 1
-    print("🔁 Reintentando con nuevo plan...")
-
-  return respuesta
+    return estado_final.respuesta
