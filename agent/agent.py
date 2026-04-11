@@ -1,9 +1,12 @@
 import ollama
 import json
-from tools import leer_archivo
-from rag import buscar_contexto, indexar_archivo
+from agent.tools import leer_archivo
+from agent.rag import buscar_contexto, indexar_archivo
 
 from dataclasses import dataclass
+
+
+## Agent State
 
 @dataclass
 class AgentState:
@@ -14,119 +17,134 @@ class AgentState:
     correcto: bool = False
     intentos: int = 0
 
+AGENT_STATE = {
+    "ultimo_contexto": "",
+    "ultima_pregunta": ""
+}
+
 
 ## PROMPTS de nodos
 
+CONTEXT_EVALUATOR_PROMPT = """
+  Eres un evaluador de relevancia para un sistema RAG.
+
+  IMPORTANTE:
+  - NO uses conocimiento del mundo.
+  - NO juzgues si la información es verdadera o falsa.
+  - SOLO evalúa si el contexto contiene información
+    que permita responder la pregunta.
+
+  Si el contexto menciona una posible respuesta,
+  aunque sea incorrecta en la vida real,
+  debe considerarse relevante.
+
+  Responde SOLO en JSON:
+
+  {
+    "relevante": true o false,
+    "razon": "explicación corta"
+  }
+"""
+
 ROUTER_PROMPT = """
-Eres un router de un agente IA.
+  Eres un router de un agente IA.
 
-Clasifica la intención del usuario.
+  Clasifica la intención del usuario.
 
-Opciones posibles:
+  Opciones posibles:
 
-- "chat" → conversación normal sin memoria
-- "memory" → preguntas sobre documentos o información previa
-- "index" → el usuario quiere guardar/indexar un archivo
+  - "chat" → conversación normal sin memoria
+  - "memory" → preguntas sobre documentos o información previa
+  - "index" → el usuario quiere guardar/indexar un archivo
 
-Devuelve SOLO JSON válido:
+  Devuelve SOLO JSON válido:
 
-{
-  "ruta": "chat"
-}
+  {
+    "ruta": "chat"
+  }
 
-o
+  o
 
-{
-  "ruta": "memory"
-}
+  {
+    "ruta": "memory"
+  }
 
-o
+  o
 
-{
-  "ruta": "index"
-}
+  {
+    "ruta": "index"
+  }
 """
 
 PLANNER_PROMPT = """
-Eres un planificador de agentes IA.
+  Eres un planificador de agentes IA.
 
-Tu trabajo NO es responder la pregunta.
+  Tu trabajo NO es responder la pregunta.
 
-Tu trabajo es crear un plan paso a paso usando acciones.
+  Tu trabajo es crear un plan paso a paso usando acciones.
 
-Acciones disponibles:
+  Acciones disponibles:
 
-- buscar_memoria(pregunta)
-- indexar_archivo(nombre_archivo)
-- responder_usuario(texto)
+  - buscar_memoria(pregunta)
+  - indexar_archivo(nombre_archivo)
+  - responder_usuario(texto)
 
-Reglas:
+  Reglas:
 
-- Si la pregunta requiere información previa,
-  primero usa buscar_memoria.
-- El último paso SIEMPRE debe ser responder_usuario.
-- Devuelve SOLO JSON válido.
+  - Si la pregunta requiere información previa,
+    primero usa buscar_memoria.
+  - El último paso SIEMPRE debe ser responder_usuario.
+  - Devuelve SOLO JSON válido.
 
-Formato:
+  IMPORTANTE:
+  - NO reformules la pregunta del usuario.
+  - Usa exactamente la pregunta recibida.
 
-{
-  "plan": [
-    {"accion": "...", "argumentos": {...}},
-    {"accion": "...", "argumentos": {...}}
-  ]
-}
+  Formato:
+
+  {
+    "plan": [
+      {"accion": "...", "argumentos": {...}},
+      {"accion": "...", "argumentos": {...}}
+    ]
+  }
 """
 
 SYSTEM_PROMPT = """
-Eres un agente con memoria persistente.
+Eres un agente que responde EXCLUSIVAMENTE usando el contexto.
 
-Tienes estas capacidades:
+- Nunca contradigas el contexto.
+- Trata el contexto como si fuera un documento legal obligatorio.
+- NO puedes usar informacion de la vida real.
+- SOLO devuelve la respuesta, sin mencionar que es así segun el contexto.
+- Devuelve la respuesta completa.
+- Si no hay información suficiente, dilo claramente.
 
-1. indexar_archivo(nombre_archivo)
-   - Guarda un documento en tu memoria permanente.
-
-2. buscar_memoria(pregunta)
-   - Busca información relevante en documentos previamente indexados.
-
-REGLAS IMPORTANTES:
-- Cuando el usuario haga preguntas sobre documentos,
-  SIEMPRE debes usar primero buscar_memoria.
-- No pidas el nombre del archivo si puedes encontrar
-  la información usando buscar_memoria.
-- Usa buscar_memoria incluso si el usuario no menciona
-  explícitamente un archivo.
-- Después de obtener resultados de memoria,
-  usa esa información para responder.
-
-Nunca inventes información si puedes buscar en memoria primero.
+Debes ser conciso y preciso.
 """
 
-EVALUATOR_PROMPT = """
-Eres un evaluador de respuestas de un agente IA.
+RESPONSE_EVALUATOR_PROMPT = """
+Eres un evaluador de grounding en un sistema RAG.
 
-Debes analizar si la respuesta es correcta
-según la pregunta original y el contexto recuperado.
+Debes decidir si la respuesta está apoyada por el contexto.
 
-Reglas:
+REGLAS:
 
-- Si la pregunta requiere información previa,
-  la respuesta DEBE usar el contexto.
-- Si no hay contexto cuando debería haberlo,
-  la respuesta es incorrecta.
-- Sé estricto.
+- El contexto es la única fuente de verdad.
+- La respuesta puede reformular, resumir o parafrasear el contexto.
+- NO requiere coincidencia literal.
+- Si la información principal aparece en el contexto,
+  la respuesta es correcta.
 
-Devuelve SOLO JSON válido:
+Ignora conocimiento del mundo real.
 
-{
-  "correcto": true
-}
+Responde SOLO JSON:
+
+{"correcto": true}
 
 o
 
-{
-  "correcto": false,
-  "razon": "explicación breve"
-}
+{"correcto": false, "razon": "..."}
 """
 
 TOOLS = [
@@ -179,7 +197,7 @@ TOOLS = [
 ]
 
 
-## Funciones de nodos
+## Funciones de tools
 
 def ejecutar_tool(nombre, argumentos):
   if nombre == "leer_archivo":
@@ -190,6 +208,55 @@ def ejecutar_tool(nombre, argumentos):
     return buscar_contexto(argumentos["pregunta"])
 
   return "Tool desconocida"
+
+
+## Funciones de nodos
+
+def evaluar_contexto(pregunta, contexto):
+
+  mensajes = [
+    {
+      "role": "system",
+      "content": CONTEXT_EVALUATOR_PROMPT,
+    },
+    {
+      "role": "user",
+      "content": f"""
+        Pregunta:
+        {pregunta}
+
+        Contexto:
+        {contexto}
+      """
+    }
+  ]
+
+  evaluacion = ollama.chat(
+    model="qwen2.5:3b",
+    messages=mensajes
+  )
+
+  contenido = evaluacion["message"]["content"]
+
+  print("evaluacion de contexto", contenido)
+
+  try:
+    return json.loads(contenido)
+  except:
+    print("Error evaluando contexto:")
+    print(contenido)
+    return {"relevante": True}
+
+def hay_memoria_relevante(pregunta):
+
+  contexto = buscar_contexto(pregunta)
+
+  if not contexto.strip():
+    return False
+
+  eval_ctx = evaluar_contexto(pregunta, contexto)
+
+  return eval_ctx.get("relevante", False)
 
 def decidir_ruta(pregunta):
 
@@ -255,23 +322,39 @@ def ejecutar_plan(plan, pregunta):
     print(f"\n⚙️ Ejecutando: {accion}")
 
     if accion == "buscar_memoria":
-      contexto = buscar_contexto(args["pregunta"])
+      # 🔒 usar SIEMPRE la pregunta real del usuario
+      query_memoria = pregunta
+      if pregunta_relacionada(pregunta) and AGENT_STATE["ultimo_contexto"]:
+          print("🧷 Usando sticky context")
+          contexto = AGENT_STATE["ultimo_contexto"]
+      else:
+          contexto = buscar_contexto(query_memoria)
 
     elif accion == "indexar_archivo":
       ejecutar_tool("indexar_archivo", args)
 
     elif accion == "responder_usuario":
 
+      historial = ""
+
+      if AGENT_STATE["ultima_pregunta"]:
+        historial = f"""
+      Pregunta anterior:
+      {AGENT_STATE["ultima_pregunta"]}
+      """
+
       mensajes = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
           "role": "user",
           "content": f"""
-            Pregunta:
-            {pregunta}
+          {historial}
 
-            Contexto:
-            {contexto}
+          Pregunta actual:
+          {pregunta}
+
+          Contexto:
+          {contexto}
           """
         }
       ]
@@ -281,14 +364,16 @@ def ejecutar_plan(plan, pregunta):
         messages=mensajes
       )
 
-      return respuesta["message"]["content"], contexto
+      respuesta_texto = respuesta["message"]["content"]
+
+      return respuesta_texto, contexto
 
   return "No se pudo ejecutar el plan."
 
 def evaluar_respuesta(pregunta, respuesta, contexto):
 
   mensajes = [
-    {"role": "system", "content": EVALUATOR_PROMPT},
+    {"role": "system", "content": RESPONSE_EVALUATOR_PROMPT},
     {
       "role": "user",
       "content": f"""
@@ -311,12 +396,56 @@ def evaluar_respuesta(pregunta, respuesta, contexto):
 
   contenido = evaluacion["message"]["content"]
 
+  print("evaluacion de respuesta:", contenido)
+
+  # if contenido["correcto"]:
+  #   AGENT_STATE["ultimo_contexto"] = contexto
+  #   AGENT_STATE["ultima_pregunta"] = pregunta
+
   try:
     return json.loads(contenido)
   except:
     print("Error evaluando:")
     print(contenido)
     return {"correcto": True}
+  
+def pregunta_relacionada(pregunta_nueva):
+  ultima = AGENT_STATE["ultima_pregunta"]
+
+  if not ultima:
+    return False
+
+  mensajes = [
+    {
+      "role": "system",
+      "content": """
+        Decide si la nueva pregunta continúa el mismo tema
+        que la pregunta anterior.
+
+        Responde SOLO:
+        SI
+        o
+        NO
+      """
+    },
+    {
+      "role": "user",
+      "content": f"""
+        Pregunta anterior:
+        {ultima}
+
+        Nueva pregunta:
+        {pregunta_nueva}
+      """
+    }
+  ]
+
+  r = ollama.chat(
+    model="qwen2.5:3b",
+    messages=mensajes
+  )
+
+  return "SI" in r["message"]["content"].upper()
   
 
 ## Funciones de State Machine
@@ -325,7 +454,25 @@ def nodo_router(state: AgentState):
 
   print("\n🧭 [ROUTER]")
 
-  ruta = decidir_ruta(state.pregunta)
+  pregunta = state.pregunta.strip()
+
+  # 1️⃣ INDEX
+  if pregunta.lower().endswith(".txt"):
+    print("Ruta elegida: index")
+    return "index", state
+
+  # 2️⃣ ⭐ CONTINUIDAD CONVERSACIONAL (PRIORIDAD MÁXIMA)
+  if pregunta_relacionada(pregunta):
+    print("🧷 Continuación detectada → memory")
+    return "plan", state
+
+  # 3️⃣ memoria semántica
+  if hay_memoria_relevante(pregunta):
+    print("Ruta elegida: memory (auto)")
+    return "plan", state
+
+  # 4️⃣ router LLM
+  ruta = decidir_ruta(pregunta)
 
   print("Ruta elegida:", ruta)
 
@@ -399,6 +546,12 @@ def nodo_evaluate(state: AgentState):
 
   state.correcto = evaluacion.get("correcto", True)
   state.intentos += 1
+
+  # ⭐ GUARDAR CONTEXTO SI FUNCIONÓ
+  if state.correcto and state.contexto:
+    AGENT_STATE["ultimo_contexto"] = state.contexto
+    AGENT_STATE["ultima_pregunta"] = state.pregunta
+    print("🧷 Sticky context actualizado")
 
   if state.correcto:
     return "end", state

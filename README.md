@@ -77,25 +77,36 @@ ollama
 python-dotenv
 chromadb
 sentence-transformers
+uvicorn
+rapidapi
+pydantic
+```
+
+Asegurar que el entorno **venv** esté activado. Si no lo está correr este comando:
+
+```bash
+venv/Scripts/activate
 ```
 
 Luego instala (Puede durar varios minutos):
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Verificar que se instalaron las dependencias:
 ```bash
-pip list
+python -m pip list
 ```
 
 ---
 
 ### 5. Ejecutar la aplicación
 
+#### 5.1. Ejecutar en CLI
+
 ```bash
-python3 main.py
+python main.py
 ```
 
 Flujo de indexación y preguntas:
@@ -103,13 +114,23 @@ Flujo de indexación y preguntas:
 ```
 ejemplo.txt
 Según los documentos en memoria, de que color son las rosas?
-De que color son las rosas?
 ```
 
 Salir de la aplicación:
 
-```
+```bash
 salir
+```
+
+#### 5.2. Ejecutar API
+
+```bash
+python -m uvicorn api.app:app --reload
+```
+
+Accesar a la UI del API:
+```
+http://127.0.0.1:8000/docs
 ```
 
 ---

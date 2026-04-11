@@ -1,4 +1,4 @@
-from agent import preguntar_agente
+from agent.agent import preguntar_agente
 
 while True:
   pregunta = input("\nNombre de archivo y pregunta (o 'salir'): ")

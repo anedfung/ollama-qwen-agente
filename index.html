@@ -1,0 +1,16 @@
+<input id="q" />
+<button onclick="send()">Enviar</button>
+<div id="res"></div>
+
+<script>
+async function send() {
+  const q = document.getElementById("q").value;
+  const res = await fetch("http://localhost:8000/chat", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({question: q})
+  });
+  const data = await res.json();
+  document.getElementById("res").innerText = data.response;
+}
+</script>
