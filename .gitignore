@@ -2,7 +2,7 @@
 /venv
 
 # Se generan al correr la aplicación.
-/__pycache__
+__pycache__/
 
 # Archivos de VSCode
 /.vscode
