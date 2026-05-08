@@ -1,11 +1,29 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from agent.agent import preguntar_agente
 
-while True:
-  pregunta = input("\nNombre de archivo y pregunta (o 'salir'): ")
+app = FastAPI()
 
-  if pregunta.lower() == "salir":
-    break
+# Define allowed origins
+origins = [
+"http://localhost",
+"http://localhost:3000",
+"https://website-1-lovat.vercel.app/"
+]
 
-  # Ahora el nombre del archivo se define en la pregunta en vez de ser fijo.
-  respuesta = preguntar_agente(pregunta)
-  print("\nAgente:", respuesta)
+app.add_middleware(
+CORSMiddleware,
+allow_origins=origins, # List of allowed origins
+allow_credentials=True,
+allow_methods=["*"], # Allow all HTTP methods
+allow_headers=["*"], # Allow all headers
+)
+
+class Query(BaseModel):
+    question: str
+
+@app.post("/chat")
+def chat(query: Query):
+    respuesta = preguntar_agente(query.question)
+    return {"response": respuesta}

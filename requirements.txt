@@ -1,0 +1,7 @@
+ollama
+python-dotenv
+chromadb
+sentence-transformers
+uvicorn
+rapidapi
+pydantic
