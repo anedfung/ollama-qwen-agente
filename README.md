@@ -80,6 +80,7 @@ sentence-transformers
 uvicorn
 rapidapi
 pydantic
+fastapi
 ```
 
 Asegurar que el entorno **venv** esté activado. Si no lo está correr este comando:
