@@ -5,3 +5,6 @@ sentence-transformers
 uvicorn
 pydantic
 fastapi
+json
+dataclasses
+pathlib
