@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from agent.agent import preguntar_agente
 
+import sys
+print("Python version:", sys.version)
+
 app = FastAPI()
 
 # Define allowed origins
