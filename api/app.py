@@ -9,7 +9,7 @@ app = FastAPI()
 origins = [
 "http://localhost",
 "http://localhost:3000",
-"https://yourdomain.com"
+"https://website-1-lovat.vercel.app/"
 ]
 
 app.add_middleware(
