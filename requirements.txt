@@ -1,8 +1,8 @@
 # ollama
 # python-dotenv
-chromadb
-sentence-transformers
-# pydantic
-# dataclasses
+# # chromadb
+# # sentence-transformers
+pydantic
+dataclasses
 uvicorn
 fastapi
