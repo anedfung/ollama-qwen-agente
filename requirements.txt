@@ -1,8 +1,2 @@
-ollama
-python-dotenv
-chromadb
-sentence-transformers
-uvicorn
-pydantic
+
 fastapi
-dataclasses
