@@ -1,6 +1,6 @@
 # ollama
 # python-dotenv
-# chromadb
+chromadb
 sentence-transformers
 # pydantic
 # dataclasses
