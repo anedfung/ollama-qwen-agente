@@ -1,5 +1,5 @@
-ollama
-# python-dotenv
+# # ollama
+python-dotenv
 # # chromadb
 # # sentence-transformers
 # # pydantic
