@@ -1,3 +1,4 @@
+# agent.py
 import ollama
 import json
 from agent.tools import leer_archivo
@@ -581,10 +582,5 @@ def ejecutar_grafo(state: AgentState):
 
   return state
 
-def preguntar_agente(pregunta):
-
-  estado = AgentState(pregunta=pregunta)
-
-  final = ejecutar_grafo(estado)
-
-  return final.respuesta
+def preguntar_agente(question: str):
+    return f"Echo: {question}"
